@@ -1,0 +1,243 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model GameSession {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  seedCapital Int?
+  gameTime    Int?
+  startTime   DateTime?
+  gameStatus  Boolean
+  dateCreated DateTime  @default(now())
+  dateChanged DateTime  @updatedAt
+
+  players Player[]
+  news    News[]
+}
+
+model News {
+  id                Int      @id @default(autoincrement())
+  description       String
+  effectCoEfficient Float
+  companyTypeId     Int
+  gameSessionId     Int
+  visibility        Boolean
+  dateCreated       DateTime @default(now())
+  dateChanged       DateTime @updatedAt
+
+  companyType CompanyType @relation(fields: [companyTypeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Player {
+  id            Int      @id @default(autoincrement())
+  playerName    String   @db.VarChar(100)
+  playerBalance Int      @default(0)
+  gameSessionId Int
+  isActive      Boolean  @default(true)
+  isCreator     Boolean  @default(false)
+  hasActiveLoan Boolean  @default(false)
+  token         String   @unique
+  dateCreated   DateTime @default(now())
+  dateChanged   DateTime @updatedAt
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  resources          ResourceOwner[]
+  companies          Company[]
+  deposits           Deposit[]
+  loans              Loan[]
+  sharesTransactions SharesTransaction[]
+  shares             SharesOwner[]
+}
+
+model Resource {
+  id           Int    @id @default(autoincrement())
+  resourceName String @db.VarChar(100)
+  resourCecost Int    @default(0)
+
+  owners       ResourceOwner[]
+  requirements Requirements[]
+  market       MarketResource[]
+}
+
+model ResourceOwner {
+  id          Int      @id @default(autoincrement())
+  resourceId  Int
+  playerId    Int
+  amount      Int
+  dateCreated DateTime @default(now())
+  dateChanged DateTime @updatedAt
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([playerId, resourceId])
+}
+
+model MarketResource {
+  id         Int      @id @default(autoincrement())
+  resourceId Int
+  isSystem   Boolean  @default(false) // true — ресурс от системы, false — от игроков
+  quantity   Int      @default(1)
+  dateAdded  DateTime @default(now())
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Deposit {
+  id           Int      @id @default(autoincrement())
+  amount       Int
+  percentage   Float
+  period       Int //количество месяцев
+  amountRepaid Int
+  dateCreated  DateTime @default(now())
+  datePayout   DateTime?
+  dateChanged  DateTime @updatedAt
+  playerId     Int
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Loan {
+  id           Int       @id @default(autoincrement())
+  amount       Int // сумма, которую взял игрок
+  interestRate Float // процент
+  period       Int // срок в месяцах
+  debt         Int // итоговая сумма к возврату
+  fine           Int       @default(0) //штраф
+  dateCreated  DateTime  @default(now())
+  dateClose    DateTime? // дата погашения
+  dateChanged  DateTime  @updatedAt
+  playerId     Int
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+model CompanyType {
+  id           Int            @id @default(autoincrement())
+  typeName     String
+  cost         Int
+  baseIncome   Float
+  companies    Company[]
+  news         News[]
+  requirements Requirements[]
+}
+
+model Company {
+  id                Int      @id @default(autoincrement())
+  companyName       String
+  companyTypeId     Int
+  incomeCoEfficient Float
+  divident_rate     Float //процент дивидентов
+  isBroken          Boolean  @default(false)
+  level             Int      @default(0)
+  playerId          Int?
+  dateCreated       DateTime @default(now())
+  dateChanged       DateTime @updatedAt
+
+  companyType CompanyType @relation(fields: [companyTypeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  owner       Player?      @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  shares          Shares?
+  companyRevenues CompanyRevenues[]
+}
+
+model Shares {
+  id          Int      @id @default(autoincrement())
+  costShares  Int
+  companyId   Int      @unique //один вид/тип акций - одно предприятие и наоборот
+  dateCreated DateTime @default(now())
+  dateChanged DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  owners      SharesOwner[]
+  transaction SharesTransaction[]
+}
+
+model SharesTransaction {
+  id              Int      @id @default(autoincrement())
+  playerId        Int
+  sharesId        Int
+  quantity        Int
+  transactionType Boolean // False - sell, True - buy
+  price           Int //цена в момент покупки/продажи итоговая (либо поштучно????)
+  dateCreated     DateTime @default(now())
+  dateChanged     DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  shares Shares @relation(fields: [sharesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model SharesOwner {
+  id          Int      @id @default(autoincrement())
+  playerId    Int
+  sharesId    Int
+  quantity    Int
+  dateCreated DateTime @default(now())
+  dateChanged DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  shares Shares @relation(fields: [sharesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  dividents DividentPayment[]
+  @@unique([playerId, sharesId])
+}
+
+model DividentPayment {
+  id            Int      @id @default(autoincrement())
+  sharesOwnerId Int
+  amount        Int
+  dateCreated   DateTime @default(now())
+  dateChanged   DateTime @updatedAt
+
+  sharesOwner SharesOwner @relation(fields: [sharesOwnerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Requirements {
+  id            Int @id @default(autoincrement())
+  amount        Int
+  companyTypeId Int
+  resourceId    Int
+
+  companyType CompanyType @relation(fields: [companyTypeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  resource    Resource    @relation(fields: [resourceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model CompanyRevenues {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  revenue     Int
+  dateCreated DateTime @default(now())
+  dateEnd     DateTime
+  dateChanged DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  tax Tax[]
+}
+
+model Tax {
+  id                Int       @id @default(autoincrement())
+  amount            Int
+  paid              Boolean
+  companyRevenuesId Int
+  dateCreated       DateTime  @default(now())
+  dateFee           DateTime?
+  dateChanged       DateTime  @updatedAt
+
+  companyRevenues CompanyRevenues @relation(fields: [companyRevenuesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+// model X {
+//   id          Int      @id @default(autoincrement())
+//   dateCreated DateTime @default(now())
+//   dateChanged DateTime @updatedAt
+// }
