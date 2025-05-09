@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { subMinutes } from 'date-fns';
 
 @Injectable()
 export class CompanyService {
@@ -19,18 +18,7 @@ export class CompanyService {
   async getCompaniesBySession(sessionId: number) {
     return this.prisma.company.findMany({
       where: {
-        OR: [
-          {
-            owner: {
-              is: {
-                gameSessionId: sessionId,
-              },
-            },
-          },
-          {
-            playerId: null,
-          },
-        ],
+        gameSessionId: sessionId
       },
       include: {
         companyType: true,
@@ -71,6 +59,7 @@ export class CompanyService {
         divident_rate: 0.1,
         level: 0,
         playerId,
+        gameSessionId: player.gameSessionId,
       },
     });
 
@@ -211,7 +200,7 @@ export class CompanyService {
 
   async randomlyBreakCompanies() {
     const allCompanies = await this.prisma.company.findMany({
-      where: { isBroken: false },
+      where: { isBroken: false, playerId: { not: null}, },
     });
 
     for (const company of allCompanies) {
@@ -352,5 +341,48 @@ export class CompanyService {
       }
     }
   }
+
+  async sellAllCompaniesBySession(sessionId: number) {
+    const companies = await this.prisma.company.findMany({
+      where: {
+        owner: {
+          gameSessionId: sessionId,
+        },
+      },
+      include: {
+        companyType: true,
+        companyRevenues: {
+          include: { tax: true },
+        },
+      },
+    });
+  
+    for (const company of companies) {
+      const unpaidTaxes = company.companyRevenues
+        .flatMap((r) => r.tax)
+        .filter((t) => !t.paid);
+  
+      const totalTaxDebt = unpaidTaxes.reduce((sum, t) => sum + t.amount, 0);
+      const companyValue = company.companyType.cost * 0.9;
+      const netValue = companyValue - totalTaxDebt;
+  
+      if (netValue > 0 && company.playerId !== null) {
+        await this.prisma.player.update({
+          where: { id: company.playerId },
+          data: { playerBalance: { increment: netValue } },
+        });
+      }
+  
+      await this.prisma.company.update({
+        where: { id: company.id },
+        data: {
+          playerId: null,
+        },
+      });
+    }
+  
+    return { message: 'Все компании сессии проданы' };
+  }
+  
   
 }

@@ -6,5 +6,6 @@ import { SharesTasks } from './shares-task';
 @Module({
   controllers: [SharesController],
   providers: [SharesService, SharesTasks],
+  exports: [SharesService],
 })
 export class SharesModule {}

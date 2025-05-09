@@ -5,15 +5,17 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GameSessionModule } from './game-session/game-session.module';
 import { PrismaModule } from './prisma/prisma.module';
-import { PlayerLoanModule } from './player-loan/player-loan.module';
+import { LoanModule } from './loan/loan.module';
 import { DepositModule } from './deposit/deposit.module';
-import { PlayerResourcesModule } from './player-resources/player-resources.module';
+import { ResourcesModule } from './resources/resources.module';
 import { CompanyModule } from './company/company.module';
 import { NewsModule } from './news/news.module';
 import { PlayerModule } from './player/player.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SharesModule } from './shares/shares.module';
+import { BotModule } from './bot-strategy/bot.module';
+import { GameMonitorService } from './game-monitor/game-monitor.service';
 
 @Module({
   imports: [
@@ -26,9 +28,9 @@ import { SharesModule } from './shares/shares.module';
     }),
     GameSessionModule,
     PrismaModule,
-    PlayerLoanModule,
+    LoanModule,
     DepositModule,
-    PlayerResourcesModule,
+    ResourcesModule,
     CompanyModule,
     NewsModule,
     PlayerModule,
@@ -38,9 +40,10 @@ import { SharesModule } from './shares/shares.module';
     }]),
     ScheduleModule.forRoot(),
     SharesModule,
+    BotModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, GameMonitorService],
 })
 export class AppModule {}
 

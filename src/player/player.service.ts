@@ -11,9 +11,13 @@ export class PlayerService {
   @Inject(forwardRef(() => GameSessionService))
   private gameSessionService: GameSessionService) {}
 
-  async createPlayer(sessionId: number, seedCapital: number, isCreator: boolean) {
-    const playerName = generateRandomName();
+  async getPlayerInfo(playerId: number) {
+    return this.prisma.player.findUnique({
+      where: { id: playerId }
+    });
+  }
 
+  async createPlayer(playerName: string, sessionId: number, seedCapital: number, isCreator: boolean, isBot: boolean) {
     const token = randomUUID();
     
     const player = await this.prisma.player.create({
@@ -22,7 +26,9 @@ export class PlayerService {
         playerBalance: seedCapital,
         gameSessionId: sessionId,
         isCreator,
+        isBot,
         token,
+        isActive: false,
       },
     });
 
@@ -48,8 +54,8 @@ export class PlayerService {
     });
 
     if (!session) throw new NotFoundException('Сессия не найдена или уже началась');
-
-    const player = await this.createPlayer(session.id, 0, false);
+    const playerName = generateRandomName();
+    const player = await this.createPlayer(playerName, session.id, 0, false, false);
     return { player };
   }
 

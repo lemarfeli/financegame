@@ -5,6 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 export class DepositService {
   constructor(private prisma: PrismaService) {}
 
+  async getDepositsByPlayer(playerId: number) {
+    return this.prisma.deposit.findMany({
+      where: { playerId }
+    });
+  }
+
   async createDeposit(playerId: number, amount: number, period: number, percentage: number) {
     const player = await this.prisma.player.findUnique({ where: { id: playerId } });
     if (!player) throw new NotFoundException('Игрок не найден');

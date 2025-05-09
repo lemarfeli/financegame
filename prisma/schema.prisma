@@ -19,6 +19,8 @@ model GameSession {
 
   players Player[]
   news    News[]
+  market       MarketResource[]
+  companies    Company[]
 }
 
 model News {
@@ -28,6 +30,7 @@ model News {
   companyTypeId     Int
   gameSessionId     Int
   visibility        Boolean
+  active            Boolean
   dateCreated       DateTime @default(now())
   dateChanged       DateTime @updatedAt
 
@@ -43,6 +46,7 @@ model Player {
   isActive      Boolean  @default(true)
   isCreator     Boolean  @default(false)
   hasActiveLoan Boolean  @default(false)
+  isBot         Boolean @default(false)
   token         String   @unique
   dateCreated   DateTime @default(now())
   dateChanged   DateTime @updatedAt
@@ -84,22 +88,25 @@ model ResourceOwner {
 model MarketResource {
   id         Int      @id @default(autoincrement())
   resourceId Int
+  gameSessionId Int
   isSystem   Boolean  @default(false) // true — ресурс от системы, false — от игроков
   quantity   Int      @default(1)
   dateAdded  DateTime @default(now())
 
   resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
 }
 
 model Deposit {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   amount       Int
   percentage   Float
   period       Int //количество месяцев
   amountRepaid Int
-  dateCreated  DateTime @default(now())
+  dateCreated  DateTime  @default(now())
   datePayout   DateTime?
-  dateChanged  DateTime @updatedAt
+  dateChanged  DateTime  @updatedAt
   playerId     Int
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -111,7 +118,7 @@ model Loan {
   interestRate Float // процент
   period       Int // срок в месяцах
   debt         Int // итоговая сумма к возврату
-  fine           Int       @default(0) //штраф
+  fine         Int       @default(0) //штраф
   dateCreated  DateTime  @default(now())
   dateClose    DateTime? // дата погашения
   dateChanged  DateTime  @updatedAt
@@ -139,11 +146,13 @@ model Company {
   isBroken          Boolean  @default(false)
   level             Int      @default(0)
   playerId          Int?
+  gameSessionId     Int?
   dateCreated       DateTime @default(now())
   dateChanged       DateTime @updatedAt
 
   companyType CompanyType @relation(fields: [companyTypeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  owner       Player?      @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  owner       Player?     @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  gameSession GameSession? @relation(fields: [gameSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   shares          Shares?
   companyRevenues CompanyRevenues[]
@@ -188,6 +197,7 @@ model SharesOwner {
   shares Shares @relation(fields: [sharesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   dividents DividentPayment[]
+
   @@unique([playerId, sharesId])
 }
 

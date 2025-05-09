@@ -6,7 +6,7 @@ import { NewsService } from './news.service';
 export class NewsTasks {
   constructor(private newsService: NewsService) {}
 
-  @Cron('*/4 * * * *') 
+  @Cron('*/4 * * * *')  
   handleRandomNews() {
     this.newsService.applyRandomNewsFromFile();
   }

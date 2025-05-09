@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Post, Body, Param, Get, ParseIntPipe } from '@nestjs/common';
 import { DepositService } from './deposit.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
 
@@ -17,5 +17,10 @@ export class DepositController {
     @Param('playerId', ParseIntPipe) playerId: number,
   ) {
     return this.depositService.closeDepositEarly(playerId, depositId);
+  }
+
+  @Get('player/:playerId')
+  async getDepositsByPlayer(@Param('playerId', ParseIntPipe) playerId: number) {
+    return this.depositService.getDepositsByPlayer(playerId);
   }
 }

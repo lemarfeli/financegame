@@ -6,20 +6,31 @@ import * as path from 'path';
 @Injectable()
 export class NewsService {
   constructor(private prisma: PrismaService) {}
-
+  
+  async getActiveNewsForSession(gameSessionId: number) {
+    return this.prisma.news.findMany({
+      where: {
+        gameSessionId,
+        active: true,
+      },
+    });
+  }
+  
   async applyRandomNewsFromFile() {
     const activeSessions = await this.prisma.gameSession.findMany({
       where: { gameStatus: true },
     });
 
     if (activeSessions.length === 0) {
-      throw new NotFoundException('Нет активных игровых сессий');
+      console.log('Нет активных игровых сессий — новость не применена');
+      return { message: 'Нет активных игровых сессий — новость не применена' };
     }
+    
 
     const randomSession = activeSessions[Math.floor(Math.random() * activeSessions.length)];
     const gameSessionId = randomSession.id;
 
-    const filePath = path.join(__dirname, '..', 'news', 'news.txt');
+    const filePath = path.join(process.cwd(), 'src', 'news', 'news.txt');
     const fileContent = fs.readFileSync(filePath, 'utf-8');
     const lines = fileContent.split('\n').filter(line => line.trim() !== '');
 
@@ -72,8 +83,11 @@ export class NewsService {
         companyTypeId,
         gameSessionId,
         visibility,
+        active: true,
       },
     });
+
+    const newsId = news.id; 
 
     if (visibility) {
       console.log(`Уведомление для игроков: "${news.description}"`);
@@ -82,6 +96,10 @@ export class NewsService {
     }
 
     setTimeout(async () => {
+      await this.prisma.news.update({
+        where: { id: newsId },
+        data: { active: false },
+      })
       await this.prisma.company.updateMany({
         where: { companyTypeId },
         data: { incomeCoEfficient: { decrement:  news.effectCoEfficient } },

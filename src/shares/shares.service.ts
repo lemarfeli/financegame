@@ -111,18 +111,13 @@ export class SharesService {
       where: {
         OR: [
           {
-            company: {
-              owner: { gameSessionId,
-                NOT: {
-                  id: playerId,
-                },
-              },
+            company: { 
+              gameSessionId,
+              owner: { NOT: { id: playerId } },
             },
           },
           {
-            company: {
-              playerId: null,
-            },
+            company: { gameSessionId: null },
           },
         ],
       },

@@ -6,5 +6,6 @@ import { DepositTasks } from './deposit-task';
 @Module({
   controllers: [DepositController],
   providers: [DepositService, DepositTasks],
+  exports: [DepositService],
 })
 export class DepositModule {}

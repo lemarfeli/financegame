@@ -2,14 +2,21 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
-export class PlayerLoanService {
+export class LoanService {
   constructor(private prisma: PrismaService) {}
+
+  async getLoanByPlayer(playerId: number) {
+    return this.prisma.loan.findFirst({
+      where: { playerId, dateClose: null},
+    });
+  }
 
   async takeLoan(playerId: number, amount: number, period: number, interestRate: number) {
     const player = await this.prisma.player.findFirst({ where: { id: playerId } });
     if (player?.hasActiveLoan) throw new NotFoundException('У вас уже есть активный кредит');
 
-    const debt = Math.round(amount * (1 + interestRate));
+    const rate = interestRate / (12 * 100)
+    const debt = Math.round(amount * rate * ((1 + interestRate) ** period)/ (((1 + interestRate) ** period) - 1));
 
     const loan = await this.prisma.loan.create({
       data: {
@@ -39,14 +46,19 @@ export class PlayerLoanService {
     const player = await this.prisma.player.findUnique({ where: { id: playerId } });
     if (!player) throw new NotFoundException('Игрок не найден');
 
-    const now = new Date();
-    const monthsElapsed =
-      (now.getFullYear() - loan.dateCreated.getFullYear()) * 12 +
-      (now.getMonth() - loan.dateCreated.getMonth());
+    let repayAmount: number;
 
-    const effectiveRate = Math.min(monthsElapsed / loan.period, 1);
-    const repayAmount = Math.round(loan.amount * (1 + loan.interestRate * effectiveRate));
-
+    if (loan.fine > 0 ) {
+      const minutesPerGameMonth = 4/12; // внутриигровой год = 4 минуты
+      const now = new Date();
+      const loanTime = loan.period  - ((now.getTime() - loan.dateCreated.getTime()) / minutesPerGameMonth / 60000);
+      const rate = loan.interestRate / (12 * 100);
+      repayAmount = Math.round(loan.amount * rate * ((1 + loan.interestRate) ** loanTime)/ (((1 + loan.interestRate) ** loanTime) - 1));
+    }
+    else {
+      repayAmount = loan.debt + loan.fine;
+    }
+    
     if (player.playerBalance < repayAmount) {
       throw new NotFoundException('Недостаточно средств для погашения кредита');
     }
@@ -58,10 +70,10 @@ export class PlayerLoanService {
 
     await this.prisma.loan.update({
       where: { id: loan.id },
-      data: { dateClose: now, debt: repayAmount },
+      data: { dateClose: new Date(), debt: repayAmount },
     });
 
-    return { message: 'Кредит досрочно погашен', repayAmount };
+    return { message: 'Кредит погашен', repayAmount };
   }
 
   async autoRepayLoans() {
@@ -107,13 +119,12 @@ export class PlayerLoanService {
         const fine = Math.round(loan.debt * 0.2);
         await this.prisma.loan.update({
           where: { id: loan.id },
-          data: { fine },
-        });
-        throw new NotFoundException('Начислен штраф, нет средств на погашение кредита');
+          data: { fine } });
+        console.warn(`Начислен штраф игроку ${player.id}, нет средств на погашение кредита`);
+        }
       }
     }
   }
-}
 
   async forceRepayAtGameEnd(playerId: number) {
     const loan = await this.prisma.loan.findFirst({

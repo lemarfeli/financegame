@@ -1,4 +1,4 @@
-import { Controller, Post,  Body, Param, Patch, Delete, Get, Query} from '@nestjs/common';
+import { Controller, Post,  Body, Param, Get, ParseIntPipe} from '@nestjs/common';
 import { CompanyService } from './company.service';
 
 @Controller('companies')
@@ -13,31 +13,30 @@ export class CompanyController {
   }
 
   @Post('sell/:companyId')
-  async sellCompany(@Param('companyId') companyId: number) {
-    return this.companyService.sellCompany(Number(companyId));
+  async sellCompany(@Param('companyId', ParseIntPipe) companyId: number) {
+    return this.companyService.sellCompany(companyId);
   }
 
-  @Patch('pay-tax/:companyId')
+  @Post('pay-tax/:companyId')
   async payTaxPartial(
-    @Param('companyId') companyId: number,
+    @Param('companyId', ParseIntPipe) companyId: number,
     @Body() data: { playerId: number; amount: number },
   ) {
     return this.companyService.payTaxPartial(
-      Number(companyId),
+      companyId,
       data.playerId,
       data.amount,
     );
   }
 
-  @Get()
-  async getAllCompanies(
-    @Body() data: { sessionId: number},
-  ) {
-    return this.companyService.getCompaniesBySession(data.sessionId);
+  @Get('session/:sessionId')
+  async getAllCompanies(@Param('sessionId', ParseIntPipe) sessionId: number) {
+    return this.companyService.getCompaniesBySession(sessionId);
   }
 
-  @Get(':playerId')
-  async getCompaniesByPlayer(@Param('playerId') playerId: number) {
-    return this.companyService.getCompaniesByPlayer(Number(playerId));
+  @Get('player/:playerId')
+  async getCompaniesByPlayer(@Param('playerId', ParseIntPipe) playerId: number) {
+    return this.companyService.getCompaniesByPlayer(playerId);
   }
 }
+

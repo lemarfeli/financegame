@@ -6,5 +6,6 @@ import { CompanyTasks } from './company-task';
 @Module({
   controllers: [CompanyController],
   providers: [CompanyService, CompanyTasks],
+  exports: [CompanyService],
 })
 export class CompanyModule {}
