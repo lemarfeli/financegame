@@ -9,11 +9,18 @@ import { DepositModule } from '../deposit/deposit.module';
 import { LoanModule } from '../loan/loan.module';
 import { SharesModule } from '../shares/shares.module';
 import { BotManagerService } from './bot-manager.service.ts';
-import { NewsModule } from 'src/news/news.module';
+import { NewsModule } from '../news/news.module';
 
 @Module({
-  
-  imports: [PrismaModule, CompanyModule, ResourcesModule, DepositModule, LoanModule, SharesModule, NewsModule],
+  imports: [
+    PrismaModule,
+    CompanyModule,
+    ResourcesModule,
+    DepositModule,
+    LoanModule,
+    SharesModule,
+    NewsModule,
+  ],
   controllers: [BotController],
   providers: [BotService, BotTasks, BotManagerService],
   exports: [BotService, BotManagerService],

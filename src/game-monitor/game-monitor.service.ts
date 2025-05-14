@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { GameSessionService } from 'src/game-session/game-session.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { GameSessionService } from '../game-session/game-session.service';
 
 @Injectable()
 export class GameMonitorService implements OnModuleInit {
@@ -27,12 +27,14 @@ export class GameMonitorService implements OnModuleInit {
 
       for (const session of activeSessions) {
         if (session.startTime && session.gameTime !== null) {
-            const endTime = new Date(session.startTime.getTime() + session.gameTime * 60000);
+          const endTime = new Date(
+            session.startTime.getTime() + session.gameTime * 60000,
+          );
 
-            if (now >= endTime) {
+          if (now >= endTime) {
             console.log(`Сессия #${session.id} завершена по таймеру`);
             await this.gameSessionService.forceEndGame(session.id);
-            }
+          }
         }
       }
     }, 10000); // каждые 10 секунд

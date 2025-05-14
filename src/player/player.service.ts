@@ -1,25 +1,33 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateRandomName } from './utils/name-generator';
-import { GameSessionService } from 'src/game-session/game-session.service';
+import { GameSessionService } from '../game-session/game-session.service';
 import { randomUUID } from 'crypto';
 import { Inject, forwardRef } from '@nestjs/common';
 
 @Injectable()
 export class PlayerService {
-  constructor(private prisma: PrismaService, 
-  @Inject(forwardRef(() => GameSessionService))
-  private gameSessionService: GameSessionService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => GameSessionService))
+    private gameSessionService: GameSessionService,
+  ) {}
 
   async getPlayerInfo(playerId: number) {
     return this.prisma.player.findUnique({
-      where: { id: playerId }
+      where: { id: playerId },
     });
   }
 
-  async createPlayer(playerName: string, sessionId: number, seedCapital: number, isCreator: boolean, isBot: boolean) {
+  async createPlayer(
+    playerName: string,
+    sessionId: number,
+    seedCapital: number,
+    isCreator: boolean,
+    isBot: boolean,
+  ) {
     const token = randomUUID();
-    
+
     const player = await this.prisma.player.create({
       data: {
         playerName,
@@ -53,9 +61,16 @@ export class PlayerService {
       where: { code, gameStatus: false, startTime: null },
     });
 
-    if (!session) throw new NotFoundException('Сессия не найдена или уже началась');
+    if (!session)
+      throw new NotFoundException('Сессия не найдена или уже началась');
     const playerName = generateRandomName();
-    const player = await this.createPlayer(playerName, session.id, 0, false, false);
+    const player = await this.createPlayer(
+      playerName,
+      session.id,
+      0,
+      false,
+      false,
+    );
     return { player };
   }
 
@@ -70,23 +85,26 @@ export class PlayerService {
   }
 
   async getPlayerBalance(playerId: number) {
-    const player = await this.prisma.player.findUnique({ where: { id: playerId } });
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+    });
     if (!player) throw new NotFoundException('Игрок не найден');
     return { balance: player.playerBalance };
   }
 
   async reconnectPlayer(playerToken: string) {
-    const player = await this.prisma.player.findUnique({ where: { token: playerToken } });
-  
+    const player = await this.prisma.player.findUnique({
+      where: { token: playerToken },
+    });
+
     if (!player) throw new NotFoundException('Игрок не найден');
     if (!player.isActive) {
       return { message: 'Вы уже покинули игру. Ожидайте завершения.' };
     }
-  
+
     return {
       message: 'Вы успешно возвращены в игру.',
       player,
     };
   }
-  
 }
