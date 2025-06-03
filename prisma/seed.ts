@@ -67,6 +67,67 @@ async function main() {
     ],
     skipDuplicates: true,
   });
+
+  await prisma.news.createMany({
+    data: [
+      {
+        description: 'Государство выдало субсидии на развитие сельского хозяйства',
+        effectCoEfficient: 0.2,
+        companyTypeId: 1,
+      },
+      {
+        description: 'Скандал с загрязнением окружающей среды ударил по репутации нефтяных компаний',
+        effectCoEfficient: -0.2,
+        companyTypeId: 2,
+      },
+      {
+        description: 'Новый закон упростил экспорт продукции IT-компаний',
+        effectCoEfficient: 0.3,
+        companyTypeId: 3,
+      },
+      {
+        description: 'Спрос на жилую недвижимость резко упал из-за повышения ставок',
+        effectCoEfficient: -0.1,
+        companyTypeId: 4,
+      },
+      {
+        description: 'Резкий рост цен на металлы увеличил доходы горнодобывающих предприятий',
+        effectCoEfficient: 0.25,
+        companyTypeId: 5,
+      },
+      {
+        description: 'Рост акций компании 1',
+        effectCoEfficient: 0.3,
+        companyTypeId: 11,
+      },
+      {
+        description: 'Рост акций компании 2',
+        effectCoEfficient: 0.4,
+        companyTypeId: 12,
+      },
+      {
+        description: 'Рост акций компании 3',
+        effectCoEfficient: 0.2,
+        companyTypeId: 13,
+      },
+      {
+        description: 'Падение акций компании 3',
+        effectCoEfficient: -0.4,
+        companyTypeId: 13,
+      },
+      {
+        description: 'Падение акций компании 2',
+        effectCoEfficient: -0.2,
+        companyTypeId: 12,
+      },
+      {
+        description: 'Падение акций компании 1',
+        effectCoEfficient: -0.1,
+        companyTypeId: 11,
+      },
+    ],
+    skipDuplicates: true,
+  });
 }
 
 main()

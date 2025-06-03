@@ -1,30 +1,30 @@
-import { Controller, Post, Body, Param, Get, ParseIntPipe} from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
 import { LoanService } from './loan.service';
 import { TakeLoanDto } from './dto/take-loan.dto';
+import { PlayerTokenGuard } from '../player/player-token.guard';
 
 @Controller('loan')
+@UseGuards(PlayerTokenGuard)
 export class LoanController {
   constructor(private readonly loanService: LoanService) {}
 
   @Post('take')
-  takeLoan(@Body() dto: TakeLoanDto) {
-    return this.loanService.takeLoan(dto.playerId, dto.amount, dto.period, dto.interestRate);
+  takeLoan(@Req() req, @Body() dto: TakeLoanDto) {
+    return this.loanService.takeLoan(req.player.id, dto.amount, dto.period, dto.interestRate);
   }
 
-  @Post('repay/:playerId')
-  repayLoan(
-    @Param('playerId', ParseIntPipe) playerId: number,
-  ) {
-    return this.loanService.repayLoan(playerId, );
+  @Post('repay')
+  repayLoan(@Req() req) {
+    return this.loanService.repayLoan(req.player.id);
   }
 
-  @Get('player/:playerId')
-  async getLoanByPlayer(@Param('playerId', ParseIntPipe) playerId: number) {
-    return this.loanService.getLoanByPlayer(playerId);
+  @Get('player')
+  async getLoanByPlayer(@Req() req) {
+    return this.loanService.getLoanByPlayer(req.player.id);
   }
-  
+
   // @Post('auto')
-  // arepayLoan() {
+  // autoRepayLoans() {
   //   return this.loanService.autoRepayLoans();
   // }
 }

@@ -1,38 +1,41 @@
-import { Controller, Post, Body, Param, Get, ParseIntPipe} from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Req, Query, ParseIntPipe} from '@nestjs/common';
 import { SharesService } from './shares.service';
 import { Throttle } from '@nestjs/throttler';
+import { PlayerTokenGuard } from '../player/player-token.guard';
 
 @Controller('shares')
+@UseGuards(PlayerTokenGuard)
 export class SharesController {
   constructor(private sharesService: SharesService) {}
 
-  
   @Throttle({ default: { limit: 1, ttl: 1 } })
   @Post('buy')
   buyShares(
-    @Body() body: { playerId: number; sharesId: number; quantity: number },
+    @Req() req,
+    @Body() body: { sharesId: number; quantity: number },
   ) {
-    return this.sharesService.buyShares(body.playerId, body.sharesId, body.quantity);
+    return this.sharesService.buyShares(req.player.id, body.sharesId, body.quantity);
   }
 
-  
   @Throttle({ default: { limit: 1, ttl: 1 } })
   @Post('sell')
   sellShares(
-    @Body() body: { playerId: number; sharesId: number; quantity: number },
+    @Req() req,
+    @Body() body: { sharesId: number; quantity: number },
   ) {
-    return this.sharesService.sellShares(body.playerId, body.sharesId, body.quantity);
+    return this.sharesService.sellShares(req.player.id, body.sharesId, body.quantity);
   }
 
-  @Get('player/:playerId')
-  getPlayerShares(@Param('playerId', ParseIntPipe) playerId: number) {
-    return this.sharesService.getPlayerShares(playerId);
+  @Get('player')
+  getPlayerShares(@Req() req) {
+    return this.sharesService.getPlayerShares(req.player.id);
   }
 
   @Get('available')
   getAvailableShares(
-    @Body() body: { gameSessionId: number; playerId: number },
+    @Req() req,
+    @Query('gameSessionId', ParseIntPipe) gameSessionId: number,
   ) {
-    return this.sharesService.getAvailableShares(body.gameSessionId, body.playerId);
+    return this.sharesService.getAvailableShares(gameSessionId, req.player.id);
   }
 }

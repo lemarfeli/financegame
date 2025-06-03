@@ -1,26 +1,25 @@
-import { Controller, Post, Body, Param, Get, ParseIntPipe } from '@nestjs/common';
+import { Controller, Post, Body, Param, Get, UseGuards, Req, ParseIntPipe } from '@nestjs/common';
 import { DepositService } from './deposit.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
+import { PlayerTokenGuard } from '../player/player-token.guard';
 
 @Controller('deposit')
+@UseGuards(PlayerTokenGuard)
 export class DepositController {
   constructor(private readonly depositService: DepositService) {}
 
   @Post('create')
-  createDeposit(@Body() dto: CreateDepositDto) {
-    return this.depositService.createDeposit(dto.playerId, dto.amount, dto.period, dto.percentage);
+  createDeposit(@Req() req, @Body() dto: CreateDepositDto) {
+    return this.depositService.createDeposit(req.player.id, dto.amount, dto.period, dto.percentage);
   }
 
-  @Post('close/:depositId/:playerId')
-  closeDepositEarly(
-    @Param('depositId', ParseIntPipe) depositId: number,
-    @Param('playerId', ParseIntPipe) playerId: number,
-  ) {
-    return this.depositService.closeDepositEarly(playerId, depositId);
+  @Post('close/:depositId')
+  closeDepositEarly(@Req() req, @Param('depositId', ParseIntPipe) depositId: number) {
+    return this.depositService.closeDepositEarly(req.player.id, depositId);
   }
 
-  @Get('player/:playerId')
-  async getDepositsByPlayer(@Param('playerId', ParseIntPipe) playerId: number) {
-    return this.depositService.getDepositsByPlayer(playerId);
+  @Get('player')
+  getDepositsByPlayer(@Req() req) {
+    return this.depositService.getDepositsByPlayer(req.player.id);
   }
 }

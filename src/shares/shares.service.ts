@@ -1,9 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from '../game-monitor/game.gateway';
 
 @Injectable()
 export class SharesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private gameGateway: GameGateway,) {}
 
   async buyShares(playerId: number, sharesId: number, quantity: number) {
     const player = await this.prisma.player.findUnique({
@@ -14,16 +15,16 @@ export class SharesService {
       include: { company: true },
     });
 
-    if (!shares || !player)
-      throw new BadRequestException('Invalid player or shares');
+    if (!shares || !player) 
+      throw new BadRequestException('Акции или игрок не существует');
 
     if (shares.company.playerId === playerId) {
-      throw new BadRequestException("You can't buy shares of your own company");
+      throw new BadRequestException("Вы не можете купить акции собственной компании");
     }
 
     const totalPrice = shares.costShares * quantity;
     if (player.playerBalance < totalPrice) {
-      throw new BadRequestException('Not enough balance');
+      throw new BadRequestException('НЕдостаточно средств');
     }
 
     await this.prisma.$transaction([
@@ -54,6 +55,8 @@ export class SharesService {
         },
       }),
     ]);
+
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
   }
 
   async sellShares(playerId: number, sharesId: number, quantity: number) {
@@ -64,13 +67,13 @@ export class SharesService {
     });
 
     if (!owner || owner.quantity < quantity) {
-      throw new BadRequestException('Not enough shares to sell');
+      throw new BadRequestException('Недостаточно акций для продажи');
     }
 
-    const shares = await this.prisma.shares.findUnique({
-      where: { id: sharesId },
+    const shares = await this.prisma.shares.findUnique({ 
+      where: { id: sharesId } 
     });
-    if (!shares) throw new BadRequestException('Shares not found');
+    if (!shares) throw new BadRequestException('Акции не найдены');
     const totalPrice = shares.costShares * quantity;
 
     await this.prisma.$transaction([
@@ -96,6 +99,9 @@ export class SharesService {
         },
       }),
     ]);
+    const player = await this.prisma.player.findUnique({ where: { id: playerId } });
+    if (!player) throw new BadRequestException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
   }
 
   async getPlayerShares(playerId: number) {
@@ -178,6 +184,10 @@ export class SharesService {
           },
         },
       });
+
+      const player = await this.prisma.player.findUnique({ where: { id: owner.playerId } });
+      if (!player) throw new BadRequestException('Игрок не найден');
+      this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
     }
   }
 

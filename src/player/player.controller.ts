@@ -1,5 +1,6 @@
-import { Controller, Post, Patch, Get, Put, Body, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Post, Patch, Get, UseGuards, Req, Body, Delete } from '@nestjs/common';
 import { PlayerService } from './player.service';
+import { PlayerTokenGuard } from '../player/player-token.guard';
 
 @Controller('player')
 export class PlayerController {
@@ -10,24 +11,34 @@ export class PlayerController {
     return this.playerService.joinSession(body.code);
   }
 
-  @Patch('exit/:playerId')
-  async exitPlayer(@Param('playerId', ParseIntPipe) playerId: number) {
-    return this.playerService.exitPlayer(playerId);
+  @UseGuards(PlayerTokenGuard)
+  @Patch('exit')
+  async exitPlayer(@Req() req) {
+    return this.playerService.exitPlayer(req.player.id);
   }
 
-  @Get('balance/:playerId')
-  async getBalance(@Param('playerId', ParseIntPipe) playerId: number) {
-    return this.playerService.getPlayerBalance(playerId);
+  @UseGuards(PlayerTokenGuard)
+  @Delete('exit-hard')
+  async deleteAndExit(@Req() req) {
+    return this.playerService.deleteAndExit(req.player.id);
   }
 
-  @Get(':playerId')
-  async getPlayerInfo(@Param('playerId', ParseIntPipe) playerId: number) {
-    return this.playerService.getPlayerInfo(playerId);
+  @UseGuards(PlayerTokenGuard)
+  @Get('balance')
+  async getBalance(@Req() req) {
+    return this.playerService.getPlayerBalance(req.player.id);
   }
 
+  @UseGuards(PlayerTokenGuard)
+  @Get()
+  async getPlayerInfo(@Req() req) {
+    return this.playerService.getPlayerInfo(req.player.id);
+  }
+
+  @UseGuards(PlayerTokenGuard)
   @Post('reconnect')
-  async reconnect(@Body() body: { token: string }) {
-    return this.playerService.reconnectPlayer(body.token);
+  async reconnect(@Req() req) {
+    return this.playerService.reconnectPlayer(req.player.token);
   }
 
 }

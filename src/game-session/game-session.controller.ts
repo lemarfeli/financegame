@@ -50,4 +50,9 @@ export class GameSessionController {
   async getAllPlayers(@Param('sessionId', ParseIntPipe) sessionId: number) {
     return this.gameSessionService.getPlayersBySession(sessionId);
   }
+
+  @Get('info/:sessionId')
+  async getSessionInfo(@Param('sessionId', ParseIntPipe) sessionId: number) {
+    return this.gameSessionService.getSessionInfo(sessionId);
+  }
 }

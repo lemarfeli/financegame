@@ -4,11 +4,13 @@ import { generateRandomName } from './utils/name-generator';
 import { GameSessionService } from '../game-session/game-session.service';
 import { randomUUID } from 'crypto';
 import { Inject, forwardRef } from '@nestjs/common';
+import { GameGateway } from 'src/game-monitor/game.gateway';
 
 @Injectable()
 export class PlayerService {
   constructor(
     private prisma: PrismaService,
+      private gameGateway: GameGateway,
     @Inject(forwardRef(() => GameSessionService))
     private gameSessionService: GameSessionService,
   ) {}
@@ -19,13 +21,18 @@ export class PlayerService {
     });
   }
 
+  async getPlayerByToken(token: string) {
+    return this.prisma.player.findUnique({
+      where: { token },
+    });
+  }
+  
   async createPlayer(
     playerName: string,
-    sessionId: number,
-    seedCapital: number,
-    isCreator: boolean,
-    isBot: boolean,
-  ) {
+     sessionId: number,
+     seedCapital: number,
+     isCreator: boolean, 
+     isBot: boolean) {
     const token = randomUUID();
 
     const player = await this.prisma.player.create({
@@ -65,12 +72,14 @@ export class PlayerService {
       throw new NotFoundException('Сессия не найдена или уже началась');
     const playerName = generateRandomName();
     const player = await this.createPlayer(
-      playerName,
-      session.id,
-      0,
-      false,
-      false,
+      playerName, 
+      session.id, 
+      0, 
+      false, 
+      false
     );
+    const players = await this.gameSessionService.getPlayersBySession(session.id);
+    this.gameGateway.sendLobbyUpdate(session.id, players);
     return { player };
   }
 
@@ -82,6 +91,25 @@ export class PlayerService {
 
     await this.gameSessionService.checkSessionAfterExit(player.gameSessionId);
     return { message: 'Игрок вышел из сессии' };
+  }
+
+  async deleteAndExit(playerId: number) {
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+    });
+
+    if (!player) throw new NotFoundException('Игрок не найден');
+    const creator = player.isCreator;
+    await this.prisma.player.delete({ where: { id: playerId } });
+    if (creator) {
+      this.gameGateway.sendSessionClosed(player.gameSessionId);
+      return { message: 'Игрок удалён, сессия закрыта' };
+    }
+    else {
+      const players = await this.gameSessionService.getPlayersBySession(player.gameSessionId);
+      this.gameGateway.sendLobbyUpdate(player.gameSessionId, players);
+      return { message: 'Игрок удалён из сессии' };
+    }
   }
 
   async getPlayerBalance(playerId: number) {

@@ -9,20 +9,20 @@ import { CompanyService } from '../company/company.service';
 import { Inject, forwardRef } from '@nestjs/common';
 import { generateRandomName } from '../player/utils/name-generator';
 import { BotManagerService } from '../bot-strategy/bot-manager.service.ts';
+import { GameGateway } from '../game-monitor/game.gateway';
 
 @Injectable()
 export class GameSessionService {
-  constructor(
-    private prisma: PrismaService,
-    @Inject(forwardRef(() => PlayerService))
-    private playerService: PlayerService,
-    private loanService: LoanService,
-    private sharesService: SharesService,
-    private resourcesService: ResourcesService,
-    private depositService: DepositService,
-    private companyService: CompanyService,
-    private botManagerService: BotManagerService,
-  ) {}
+  constructor(private prisma: PrismaService, 
+  @Inject(forwardRef(() => PlayerService)) private playerService: PlayerService, 
+  private loanService: LoanService,
+  private sharesService: SharesService,
+  private resourcesService: ResourcesService,
+  private depositService: DepositService,
+  private companyService: CompanyService,
+  private botManagerService: BotManagerService, 
+  private gameGateway: GameGateway,
+) {}
 
   async generateGameCode(): Promise<string> {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -62,6 +62,14 @@ export class GameSessionService {
     });
   }
 
+  async getSessionInfo(sessionId: number) {
+    return this.prisma.gameSession.findMany({
+      where: {
+        id: sessionId
+      }
+    });
+  }
+
   async startGame(sessionId: number, seedCapital: number, gameTime: number) {
     const now = new Date();
 
@@ -88,18 +96,17 @@ export class GameSessionService {
 
     await this.botManagerService.startBotsForSession(sessionId);
 
+    this.gameGateway.notifyGameStart(sessionId);
+
     return { message: `Игра началась. Старт в ${now.toISOString()}` };
   }
 
   async addBotToSession(gameSessionId: number) {
+
     const botName = `Бот_${Math.floor(Math.random() * 10000)}`;
-    const bot = await this.playerService.createPlayer(
-      botName,
-      gameSessionId,
-      0,
-      false,
-      true,
-    );
+    const bot = await this.playerService.createPlayer(botName, gameSessionId, 0, false, true);
+    const players = await this.getPlayersBySession(gameSessionId);
+    this.gameGateway.sendLobbyUpdate(gameSessionId, players);
 
     return { bot };
   }
@@ -108,6 +115,8 @@ export class GameSessionService {
     const bot = await this.prisma.player.findUnique({ where: { id: botId } });
     if (!bot || !bot.isBot) throw new NotFoundException('Бот не найден');
     await this.prisma.player.delete({ where: { id: botId } });
+    const players = await this.getPlayersBySession(bot.gameSessionId);
+    this.gameGateway.sendLobbyUpdate(bot.gameSessionId, players);
   }
 
   async forceEndGame(sessionId: number) {
@@ -119,7 +128,7 @@ export class GameSessionService {
       return { message: 'Игра уже завершена или не найдена.' };
     }
 
-    await this.botManagerService.stopBotsForSession(sessionId);
+    await this.botManagerService.stopBotsForSession(sessionId)
 
     const players = await this.prisma.player.findMany({
       where: { gameSessionId: sessionId },
@@ -180,10 +189,15 @@ export class GameSessionService {
       data: { isActive: false },
     });
 
-    await this.getGameResults(sessionId);
+    const results = await this.getGameResults(sessionId)
+    this.gameGateway.notifyGameOver(sessionId, results)
   }
 
   async getGameResults(sessionId: number) {
+    const session = await this.prisma.gameSession.findUnique({where: { id: sessionId, gameStatus: false },});
+    if (!session || session.gameStatus) {
+      throw new Error('Игра еще не завершена');
+    }
     const finalPlayers = await this.prisma.player.findMany({
       where: { gameSessionId: sessionId },
       orderBy: { playerBalance: 'desc' },
@@ -200,7 +214,7 @@ export class GameSessionService {
 
   async checkSessionAfterExit(sessionId: number) {
     const activePlayers = await this.prisma.player.findMany({
-      where: { gameSessionId: sessionId, isActive: true, isBot: false },
+      where: { gameSessionId: sessionId, isActive: true, isBot: false},
     });
 
     if (activePlayers.length === 0) {

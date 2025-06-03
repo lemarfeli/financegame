@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from 'src/game-monitor/game.gateway';
 
 @Injectable()
 export class DepositService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private gameGateway: GameGateway,) {}
 
   async getDepositsByPlayer(playerId: number) {
     return this.prisma.deposit.findMany({
@@ -33,6 +34,8 @@ export class DepositService {
       where: { id: playerId },
       data: { playerBalance: { decrement: amount } },
     });
+    
+    this.gameGateway.sendBalanceUpdate(playerId, player.playerBalance);
 
     return { message: 'Вклад успешно открыт', deposit };
   }
@@ -65,6 +68,8 @@ export class DepositService {
       where: { id: playerId },
       data: { playerBalance: { increment: payout } },
     });
+    
+    this.gameGateway.sendBalanceUpdate(playerId, player.playerBalance);
 
     await this.prisma.deposit.update({
       where: { id: depositId },
@@ -105,6 +110,8 @@ export class DepositService {
           where: { id: player.id },
           data: { playerBalance: { increment: payout } },
         });
+        
+        this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
 
         await this.prisma.deposit.update({
           where: { id: deposit.id },

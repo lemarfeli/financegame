@@ -1,16 +1,46 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from 'src/game-monitor/game.gateway';
 
 @Injectable()
 export class CompanyService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private gameGateway: GameGateway,
+  ) {}
+
+  async getAllCompanyTypes() {
+    return this.prisma.companyType.findMany();
+  }
+
+  async getRequirementsByCompanyType(companyTypeId: number) {
+    return this.prisma.requirements.findMany({
+      where: { companyTypeId },
+      include: {
+        resource: true,
+      },
+    });
+  }
 
   async getCompaniesByPlayer(playerId: number) {
     return this.prisma.company.findMany({
       where: { playerId },
       include: {
         companyType: true,
-        companyRevenues: true,
+        companyRevenues: {
+          include: {
+            tax: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getCompanyInfo(companyId: number) {
+    return this.prisma.company.findUnique({
+      where: { id: companyId },
+      include: {
+        companyType: true,
       },
     });
   }
@@ -75,6 +105,10 @@ export class CompanyService {
       data: { playerBalance: { decrement: companyType.cost } },
     });
 
+    const updateplayer = await this.prisma.player.findUnique({ where: { id: playerId } });
+    if (!updateplayer) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(playerId, updateplayer.playerBalance);
+
     for (const req of requirements) {
       await this.prisma.resourceOwner.updateMany({
         where: { playerId, resourceId: req.resourceId },
@@ -99,6 +133,32 @@ export class CompanyService {
     }
   }
   
+  async getExpectedIncome(companyId: number){
+    const companyType = await this.prisma.companyType.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!companyType) {
+      throw new Error('Тип компании не найден');
+    }
+
+    const totalCompanies = await this.prisma.company.count({
+      where: { companyTypeId: companyId },
+    });
+
+    const incomeCoefficient = 1.0 - totalCompanies * 0.1;
+    const expectedIncome = Math.round(companyType.baseIncome * incomeCoefficient * 100);
+
+    return {
+      companyId,
+      typeName: companyType.typeName,
+      baseIncome: companyType.baseIncome,
+      totalCompanies,
+      incomeCoefficient: parseFloat(incomeCoefficient.toFixed(2)),
+      expectedIncome,
+    };
+  }
+
   async sellCompany(companyId: number) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
@@ -112,7 +172,7 @@ export class CompanyService {
     if (!company) throw new NotFoundException('Предприятие не найдено');
   
     const unpaidTaxes = company.companyRevenues
-      .flatMap((r) => r.tax)
+      .flatMap((r) => r.tax ? [r.tax] : [])
       .filter((t) => !t.paid);
   
     const totalTaxDebt = unpaidTaxes.reduce((sum, t) => sum + t.amount, 0);
@@ -125,8 +185,10 @@ export class CompanyService {
       where: { id: company.playerId },
       data: { playerBalance: { increment: netValue } },
     });
+    const player = await this.prisma.player.findUnique({ where: { id: company.playerId } });
+    if (!player) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
   }
-
   
     await this.prisma.company.update({
       where: { id: companyId },
@@ -159,10 +221,14 @@ export class CompanyService {
       data: { playerBalance: { decrement: upgradeCost } },
     });
 
+    const updateplayer = await this.prisma.player.findUnique({ where: { id: company.playerId } });
+    if (!updateplayer) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(company.playerId, updateplayer.playerBalance);
+
     await this.prisma.company.update({
       where: { id: companyId },
       data: {
-        incomeCoEfficient: { increment: 0.1 },
+        incomeCoEfficient: { increment: 0.2 },
         level: { increment: 1 },
       },
     });
@@ -184,11 +250,14 @@ export class CompanyService {
       throw new BadRequestException('Недостаточно средств');
     }
 
-    
     await this.prisma.player.update({
       where: { id: company.playerId },
       data: { playerBalance: { decrement: repairCost } },
     });
+
+    const updateplayer = await this.prisma.player.findUnique({ where: { id: company.playerId } });
+    if (!updateplayer) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(company.playerId, updateplayer.playerBalance);
 
     await this.prisma.company.update({
       where: { id: companyId },
@@ -230,10 +299,7 @@ export class CompanyService {
       const diffMs = now.getTime() - lastDate.getTime();
   
       if (diffMs >= 4 * 60 * 1000) {
-        const baseIncome = company.companyType.baseIncome ?? 1000;
-        const competitionCoef = company.incomeCoEfficient;
-        const levelCoef = 1 + 0.2 * (company.level - 1);
-        const revenue = Math.round(baseIncome * competitionCoef * levelCoef);
+        const revenue = Math.round(company.companyType.baseIncome * company.incomeCoEfficient * 100);
   
         const revenueRecord = await this.prisma.companyRevenues.create({
           data: {
@@ -259,6 +325,9 @@ export class CompanyService {
           where: { id: company.playerId },
           data: { playerBalance: { increment: revenue } },
         });
+        const player = await this.prisma.player.findUnique({ where: { id: company.playerId } });
+        if (!player) throw new NotFoundException('Игрок не найден');
+        this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
       }
     }
   }
@@ -305,7 +374,9 @@ export class CompanyService {
       where: { id: playerId },
       data: { playerBalance: { decrement: amount - remaining } },
     });
-  
+
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
+
     return {
       message: `Оплачено ${amount - remaining} монет налогов. Остаток: ${remaining}`,
     };
@@ -332,6 +403,8 @@ export class CompanyService {
             where: { id: player.id },
             data: { playerBalance: { decrement: tax.amount } },
           });
+
+          this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
   
           await this.prisma.tax.update({
             where: { id: tax.id },
@@ -359,7 +432,7 @@ export class CompanyService {
   
     for (const company of companies) {
       const unpaidTaxes = company.companyRevenues
-        .flatMap((r) => r.tax)
+        .flatMap((r) => r.tax ? [r.tax] : [])
         .filter((t) => !t.paid);
   
       const totalTaxDebt = unpaidTaxes.reduce((sum, t) => sum + t.amount, 0);

@@ -9,11 +9,12 @@ import { DepositModule } from '../deposit/deposit.module';
 import { LoanModule } from '../loan/loan.module';
 import { SharesModule } from '../shares/shares.module';
 import { BotModule} from 'src/bot-strategy/bot.module';
+import { GameGateway } from 'src/game-monitor/game.gateway';
 
 @Module({
-  imports: [PrismaModule, forwardRef(() => PlayerModule), CompanyModule, ResourcesModule, DepositModule, LoanModule, SharesModule, BotModule],
-  providers: [GameSessionService],
+  imports: [PrismaModule, forwardRef(() => PlayerModule), forwardRef(() => CompanyModule), forwardRef(() => ResourcesModule), forwardRef(() => DepositModule), forwardRef(() => LoanModule), forwardRef(() => SharesModule), BotModule],
+  providers: [GameSessionService, GameGateway],
   controllers: [GameSessionController],
-  exports: [GameSessionService],
+  exports: [GameSessionService, GameGateway],
 })
 export class GameSessionModule {}

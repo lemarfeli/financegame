@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from 'src/game-monitor/game.gateway';
 
 @Injectable()
 export class ResourcesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private gameGateway: GameGateway,) {}
 
   async updateSystemMarketResources(gameSessionId: number) {
     await this.prisma.marketResource.deleteMany({
@@ -45,15 +46,36 @@ export class ResourcesService {
     const resource = await this.prisma.resource.findUnique({ where: { id: resourceId } });
     if (!resource) throw new NotFoundException('Ресурс не найден');
 
-    await this.prisma.resourceOwner.update({
-      where: { id: ownership.id },
-      data: { amount: { decrement: 1 } },
-    });
+      if (ownership.amount <= 1) {
+        try {
+          const stillExists = await this.prisma.resourceOwner.findUnique({
+            where: { id: ownership.id },
+          });
+
+          if (stillExists) {
+            await this.prisma.resourceOwner.delete({
+              where: { id: ownership.id },
+            });
+          }
+        } catch (error) {
+          console.error(`Ошибка при удалении resourceOwner ${ownership.id}: ${error.message}`);
+        }
+      } else {
+        await this.prisma.resourceOwner.update({
+          where: { id: ownership.id },
+          data: { amount: { decrement: 1 } },
+        });
+    }
+
 
     await this.prisma.player.update({
       where: { id: playerId },
       data: { playerBalance: { increment: resource.resourCecost } },
     });
+
+    const player = await this.prisma.player.findUnique({ where: { id: playerId } });
+    if (!player) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
 
     await this.addPlayerResourceToMarket(resourceId, gameSessionId);
 
@@ -103,6 +125,8 @@ export class ResourcesService {
       where: { id: playerId },
       data: { playerBalance: { decrement: resource.resourCecost } },
     });
+
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
 
     await this.prisma.resourceOwner.upsert({
       where: { playerId_resourceId: { playerId, resourceId } },

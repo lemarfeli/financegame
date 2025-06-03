@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from 'src/game-monitor/game.gateway';
 
 @Injectable()
 export class LoanService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private gameGateway: GameGateway,) {}
 
   async getLoanByPlayer(playerId: number) {
     return this.prisma.loan.findFirst({
@@ -13,6 +14,7 @@ export class LoanService {
 
   async takeLoan(playerId: number, amount: number, period: number, interestRate: number) {
     const player = await this.prisma.player.findFirst({ where: { id: playerId } });
+    if (!player) throw new NotFoundException('Игрок не найден');
     if (player?.hasActiveLoan) throw new NotFoundException('У вас уже есть активный кредит');
 
     const rate = interestRate / (12 * 100)
@@ -33,6 +35,8 @@ export class LoanService {
       where: { id: playerId },
       data: { playerBalance: { increment: amount }, hasActiveLoan: true },
     });
+    
+    this.gameGateway.sendBalanceUpdate(playerId, player.playerBalance);
 
     return { message: 'Кредит успешно выдан', loan };
   }
@@ -67,6 +71,8 @@ export class LoanService {
       where: { id: playerId },
       data: { playerBalance: { decrement: repayAmount }, hasActiveLoan: false },
     });
+    
+    this.gameGateway.sendBalanceUpdate(playerId, player.playerBalance);
 
     await this.prisma.loan.update({
       where: { id: loan.id },
@@ -113,6 +119,7 @@ export class LoanService {
             },
           }),
         ]);
+        this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
         return { message: 'Кредит погашен', totalDebt };
         
       } else if (loan.fine === 0) {
@@ -144,6 +151,7 @@ export class LoanService {
         hasActiveLoan: false,
       },
     });
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
 
     await this.prisma.loan.update({
       where: { id: loan.id },

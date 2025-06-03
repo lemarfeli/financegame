@@ -1,14 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import * as fs from 'fs';
-import * as path from 'path';
 
 @Injectable()
 export class NewsService {
   constructor(private prisma: PrismaService) {}
 
   async getActiveNewsForSession(gameSessionId: number) {
-    return this.prisma.news.findMany({
+    return this.prisma.newsApply.findMany({
       where: {
         gameSessionId,
         active: true,
@@ -16,7 +14,19 @@ export class NewsService {
     });
   }
 
-  async applyRandomNewsFromFile() {
+  async getVisibleActiveNewsForSession(gameSessionId: number) {
+    return this.prisma.newsApply.findMany({
+      where: {
+        gameSessionId,
+        active: true,
+        visibility: true,
+      },
+      include: {
+        news: true,
+      },
+    });
+  }
+  async applyRandomNews() {
     const activeSessions = await this.prisma.gameSession.findMany({
       where: { gameStatus: true },
     });
@@ -30,24 +40,20 @@ export class NewsService {
       activeSessions[Math.floor(Math.random() * activeSessions.length)];
     const gameSessionId = randomSession.id;
 
-    const filePath = path.join(process.cwd(), 'src', 'news', 'news.txt');
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    const lines = fileContent.split('\n').filter((line) => line.trim() !== '');
-
-    if (lines.length === 0) {
-      throw new NotFoundException('Файл новостей пуст');
+    const allNews = await this.prisma.news.findMany();
+    if (allNews.length === 0) {
+      throw new NotFoundException('В базе нет новостей');
     }
 
-    const randomLine = lines[Math.floor(Math.random() * lines.length)];
-    const [description, effectStr, companyTypeIdStr] = randomLine.split('|');
+    const randomNews = allNews[Math.floor(Math.random() * allNews.length)];
 
-    const effect = parseFloat(effectStr);
-    const companyTypeId = parseInt(companyTypeIdStr);
+    const { id: newsId, effectCoEfficient, companyTypeId, description } = randomNews;
+   
     const visibility = Math.random() < 0.5;
 
     await this.prisma.company.updateMany({
       where: { companyTypeId },
-      data: { incomeCoEfficient: { increment: effect } },
+      data: { incomeCoEfficient: { increment: effectCoEfficient } },
     });
 
     const companies = await this.prisma.company.findMany({
@@ -71,64 +77,57 @@ export class NewsService {
         },
         data: {
           costShares: {
-            multiply: effect,
+            multiply: effectCoEfficient,
           },
         },
       });
     }
 
-    const news = await this.prisma.news.create({
+    const appliedNews = await this.prisma.newsApply.create({
       data: {
-        description: description.trim(),
-        effectCoEfficient: effect,
-        companyTypeId,
+        newsId: newsId,
         gameSessionId,
         visibility,
         active: true,
       },
+      include: { news: true },
     });
 
-    const newsId = news.id;
-
     if (visibility) {
-      console.log(`Уведомление для игроков: "${news.description}"`);
+      console.log(`Уведомление для игроков: "${description}"`);
     } else {
-      console.log(
-        `Невидимая новость "${news.description}" применена без уведомления`,
-      );
+      console.log(`Невидимая новость "${description}" применена без уведомления`);
     }
 
-    setTimeout(
-      async () => {
-        await this.prisma.news.update({
-          where: { id: newsId },
-          data: { active: false },
-        });
-        await this.prisma.company.updateMany({
-          where: { companyTypeId },
-          data: { incomeCoEfficient: { decrement: news.effectCoEfficient } },
-        });
+    setTimeout(async () => {
+      await this.prisma.newsApply.update({
+        where: { id: appliedNews.id },
+        data: { active: false },
+      });
+      await this.prisma.company.updateMany({
+        where: { companyTypeId },
+        data: { incomeCoEfficient: { decrement:  effectCoEfficient } },
+      });
 
-        if (companyIds.length > 0) {
-          await this.prisma.shares.updateMany({
-            where: {
-              companyId: { in: companyIds },
+      if (companyIds.length > 0  && effectCoEfficient !== 0) {
+        await this.prisma.shares.updateMany({
+          where: {
+            companyId: { in: companyIds },
+          },
+          data: {
+            costShares: {
+              divide: effectCoEfficient,
             },
-            data: {
-              costShares: {
-                divide: effect,
-              },
-            },
-          });
-        }
-
-        console.log(`Эффект новости "${news.description}" завершён`);
+          },
+        });
+      }
+        console.log(`Эффект новости "${description}" завершён`);
       },
       4 * 60 * 1000,
     );
 
     return {
-      message: `Новость "${news.description}" применена${visibility ? ' и показана игроку' : ''}.`,
+      message: `Новость "${description}" применена${visibility ? ' и показана игроку' : ''}.`,
     };
   }
 }

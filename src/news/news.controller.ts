@@ -9,4 +9,9 @@ export class NewsController {
     async getActiveNewsForSession(@Param('sessionId', ParseIntPipe) sessionId: number) {
       return this.newsService.getActiveNewsForSession(sessionId);
     }
+
+    @Get('visible/:sessionId')
+    async getVisibleActiveNewsForSession(@Param('sessionId', ParseIntPipe) sessionId: number) {
+      return this.newsService.getVisibleActiveNewsForSession(sessionId);
+    }
 }

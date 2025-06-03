@@ -13,16 +13,24 @@ CREATE TABLE "GameSession" (
 );
 
 -- CreateTable
-CREATE TABLE "News" (
+CREATE TABLE "NewsApply" (
     "id" SERIAL NOT NULL,
-    "description" TEXT NOT NULL,
-    "effectCoEfficient" DOUBLE PRECISION NOT NULL,
-    "companyTypeId" INTEGER NOT NULL,
+    "newsId" INTEGER NOT NULL,
     "gameSessionId" INTEGER NOT NULL,
     "visibility" BOOLEAN NOT NULL,
     "active" BOOLEAN NOT NULL,
     "dateCreated" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "dateChanged" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "NewsApply_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "News" (
+    "id" SERIAL NOT NULL,
+    "description" TEXT NOT NULL,
+    "effectCoEfficient" DOUBLE PRECISION NOT NULL,
+    "companyTypeId" INTEGER NOT NULL,
 
     CONSTRAINT "News_pkey" PRIMARY KEY ("id")
 );
@@ -233,11 +241,20 @@ CREATE UNIQUE INDEX "Shares_companyId_key" ON "Shares"("companyId");
 -- CreateIndex
 CREATE UNIQUE INDEX "SharesOwner_playerId_sharesId_key" ON "SharesOwner"("playerId", "sharesId");
 
--- AddForeignKey
-ALTER TABLE "News" ADD CONSTRAINT "News_companyTypeId_fkey" FOREIGN KEY ("companyTypeId") REFERENCES "CompanyType"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- CreateIndex
+CREATE UNIQUE INDEX "Requirements_resourceId_companyTypeId_key" ON "Requirements"("resourceId", "companyTypeId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Tax_companyRevenuesId_key" ON "Tax"("companyRevenuesId");
 
 -- AddForeignKey
-ALTER TABLE "News" ADD CONSTRAINT "News_gameSessionId_fkey" FOREIGN KEY ("gameSessionId") REFERENCES "GameSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "NewsApply" ADD CONSTRAINT "NewsApply_gameSessionId_fkey" FOREIGN KEY ("gameSessionId") REFERENCES "GameSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NewsApply" ADD CONSTRAINT "NewsApply_newsId_fkey" FOREIGN KEY ("newsId") REFERENCES "News"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "News" ADD CONSTRAINT "News_companyTypeId_fkey" FOREIGN KEY ("companyTypeId") REFERENCES "CompanyType"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Player" ADD CONSTRAINT "Player_gameSessionId_fkey" FOREIGN KEY ("gameSessionId") REFERENCES "GameSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;

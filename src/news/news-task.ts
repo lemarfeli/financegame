@@ -8,7 +8,7 @@ export class NewsTasks {
 
   @Cron('*/4 * * * *')  
   handleRandomNews() {
-    this.newsService.applyRandomNewsFromFile();
+    this.newsService.applyRandomNews();
   }
 
 }

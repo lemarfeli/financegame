@@ -82,9 +82,13 @@ export class BotService {
       include: {
         gameSession: {
           include: {
-            news: {
-              include: { companyType: true },
-              where: { visibility: true },
+            newsApply: {
+              include: { 
+                news: {
+                  include: { companyType: true }
+                } 
+              },
+              where: { visibility: true, active: true },
             },
           },
         },
@@ -275,15 +279,15 @@ export class BotService {
       this.botTargets.set(bot.id, botState);
       return;
     }
+  
+    const positiveNews = bot.gameSession.newsApply
+    .filter((na) => na.news.effectCoEfficient > 0)
+    .sort((a, b) => b.news.effectCoEfficient - a.news.effectCoEfficient);
 
-    const positiveNews = bot.gameSession.news
-      .filter((n) => n.effectCoEfficient > 0 && n.active)
-      .sort((a, b) => b.effectCoEfficient - a.effectCoEfficient);
+    for (const newsApply of positiveNews) {
+      const news = newsApply.news;
+      const hasCompanyOfType = bot.companies.some((c) => c.companyTypeId === news.companyTypeId);
 
-    for (const news of positiveNews) {
-      const hasCompanyOfType = bot.companies.some(
-        (c) => c.companyTypeId === news.companyTypeId,
-      );
       if (!hasCompanyOfType) {
         const companiesOfType = await this.prisma.company.count({
           where: { companyTypeId: news.companyTypeId },
@@ -441,9 +445,15 @@ export class BotService {
 
   private async handleSharesTrading(bot: any) {
     try {
-      const news = await this.newsService.getActiveNewsForSession(
-        bot.gameSessionId,
-      );
+      const newsApply = await this.prisma.newsApply.findMany({
+        where: { 
+          gameSessionId: bot.gameSessionId,
+          active: true
+        },
+        include: {
+          news: true
+        }
+      });
       const playerShares = await this.sharesService.getPlayerShares(bot.id);
       const allShares = await this.sharesService.getAvailableShares(
         bot.gameSessionId,
@@ -451,10 +461,9 @@ export class BotService {
       );
 
       const companyNewsMap = new Map<number, number>();
-      for (const n of news) {
-        companyNewsMap.set(n.companyTypeId, n.effectCoEfficient);
+      for (const na of newsApply) {
+        companyNewsMap.set(na.news.companyTypeId, na.news.effectCoEfficient);
       }
-
       // продажа акций, плохие новости или рандомно
       for (const owned of playerShares) {
         const company = owned.shares.company;

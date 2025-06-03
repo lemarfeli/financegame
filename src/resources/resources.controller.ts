@@ -1,34 +1,40 @@
-import { Controller, Get, Post, Body, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseIntPipe, UseGuards, Req } from '@nestjs/common';
 import { ResourcesService } from './resources.service';
 import { Throttle } from '@nestjs/throttler';
+import { PlayerTokenGuard } from '../player/player-token.guard';
 
 @Controller('resources')
 export class ResourcesController {
   constructor(private readonly resourcesService: ResourcesService) {}
 
-  @Get('market/:gameSessiondId')
-  async getMarketResources(@Param('gameSessiondId', ParseIntPipe) gameSessiondId: number) {
-    return this.resourcesService.getMarketResources(gameSessiondId);
+  @Get('market/:gameSessionId')
+  async getMarketResources(@Param('gameSessionId', ParseIntPipe) gameSessionId: number) {
+    return this.resourcesService.getMarketResources(gameSessionId);
   }
-
-  @Get(':playerId')
-  async getPlayerResources(@Param('playerId', ParseIntPipe) playerId: number) {
-    return this.resourcesService.getPlayerResources(playerId);
+  
+  @UseGuards(PlayerTokenGuard)
+  @Get()
+  async getPlayerResources(@Req() req) {
+    return this.resourcesService.getPlayerResources(req.player.id);
   }
 
   @Throttle({ default: { limit: 1, ttl: 1 } })
+  @UseGuards(PlayerTokenGuard)
   @Post('buy')
   async buyFromMarket(
-    @Body() body: { playerId: number; resourceId: number; gameSessiondId: number}
+    @Req() req,
+    @Body() body: { resourceId: number; gameSessionId: number}
   ) {
-    return this.resourcesService.buyFromMarket(body.playerId, body.resourceId, body.gameSessiondId);
+    return this.resourcesService.buyFromMarket(req.player.id, body.resourceId, body.gameSessionId);
   }
 
   @Throttle({ default: { limit: 1, ttl: 1 } })
+  @UseGuards(PlayerTokenGuard)
   @Post('sell')
   async sellToMarket(
-    @Body() body: { playerId: number; resourceId: number; gameSessiondId: number}
+    @Req() req,
+    @Body() body: { resourceId: number; gameSessionId: number}
   ) {
-    return this.resourcesService.sellToMarket(body.playerId, body.resourceId, body.gameSessiondId);
+    return this.resourcesService.sellToMarket(req.player.id, body.resourceId, body.gameSessionId);
   }
 }
