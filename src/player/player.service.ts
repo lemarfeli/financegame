@@ -50,6 +50,7 @@ export class PlayerService {
   });
 
   return {
+    playerName: player.playerName,
     hasLoan: player?.hasActiveLoan,
     deposits: player.deposits.length,
     companies: player.companies.length,
