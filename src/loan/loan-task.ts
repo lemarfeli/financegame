@@ -4,11 +4,12 @@ import { LoanService } from './loan.service';
 
 @Injectable()
 export class LoanTasks {
-  constructor(private companyService: LoanService) {}
+  constructor(private loanService: LoanService) {}
 
   @Cron('*/1 * * * *')
   handleLoanRepay() {
-    this.companyService.autoRepayLoans();
+    this.loanService.autoRepayLoans();
+    this.loanService.notifyExpiringLoans();
   }
 
 }

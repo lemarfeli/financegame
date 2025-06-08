@@ -20,6 +20,10 @@ export class DepositService {
       throw new BadRequestException('Недостаточно средств для открытия вклада');
     }
 
+    if (amount <= 0) {
+      throw new BadRequestException('Сумма должна быть положительной')
+    }
+
     const deposit = await this.prisma.deposit.create({
       data: {
         playerId,
@@ -35,7 +39,13 @@ export class DepositService {
       data: { playerBalance: { decrement: amount } },
     });
     
-    this.gameGateway.sendBalanceUpdate(playerId, player.playerBalance);
+    const updateplayer = await this.prisma.player.findUnique({ where: { id: playerId } });
+    if (!updateplayer) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(playerId, updateplayer.playerBalance);
+    this.gameGateway.sendPlayerAction(
+      player.gameSessionId, player.id,
+      `${player.playerName} открыл вклад на сумму ${deposit.amount} монет`
+    );
 
     return { message: 'Вклад успешно открыт', deposit };
   }
@@ -69,12 +79,18 @@ export class DepositService {
       data: { playerBalance: { increment: payout } },
     });
     
-    this.gameGateway.sendBalanceUpdate(playerId, player.playerBalance);
-
     await this.prisma.deposit.update({
       where: { id: depositId },
       data: { amountRepaid: payout, datePayout: new Date() },
     });
+
+    const updateplayer = await this.prisma.player.findUnique({ where: { id: playerId } });
+    if (!updateplayer) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(playerId, updateplayer.playerBalance);
+    this.gameGateway.sendPlayerAction(
+      player.gameSessionId, player.id,
+      `${player.playerName} досрочно закрыл вклад и получил выплату в размере ${payout} монет`
+    );
 
     return { message: 'Вклад закрыт досрочно', payout };
   }
@@ -110,13 +126,19 @@ export class DepositService {
           where: { id: player.id },
           data: { playerBalance: { increment: payout } },
         });
-        
-        this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
-
+      
         await this.prisma.deposit.update({
           where: { id: deposit.id },
           data: { amountRepaid: payout, datePayout: new Date() },
         });
+
+        const updateplayer = await this.prisma.player.findUnique({ where: { id: player.id } });
+        if (!updateplayer) throw new NotFoundException('Игрок не найден');
+        this.gameGateway.sendBalanceUpdate(player.id, updateplayer.playerBalance);
+        this.gameGateway.sendPlayerAction(
+          player.gameSessionId, player.id,
+          `По истечению срока у ${player.playerName} автоматически закрылся вклад на сумму ${payout} монет`
+        );
 
         maturedDeposits.push(deposit.id);
       }

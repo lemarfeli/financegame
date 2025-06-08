@@ -26,6 +26,38 @@ export class PlayerService {
       where: { token },
     });
   }
+
+  async playerInventory(playerId: number){
+    const player = await this.prisma.player.findUnique({
+    where: { id: playerId },
+    include: {
+      deposits: { where: { datePayout: null } },
+      companies: true,
+      shares: true,
+      resources: true,
+    },
+  });
+
+  if (!player) throw new NotFoundException('Игрок не найден');
+
+  const unpaidTaxes = await this.prisma.tax.count({
+    where: {
+      paid: false,
+      companyRevenues: {
+        company: { playerId },
+      },
+    },
+  });
+
+  return {
+    hasLoan: player?.hasActiveLoan,
+    deposits: player.deposits.length,
+    companies: player.companies.length,
+    unpaidTaxes,
+    resources: player.resources.reduce((sum, r) => sum + r.amount, 0),
+    shares: player.shares.reduce((sum, s) => sum + s.quantity, 0),
+  };
+  }
   
   async createPlayer(
     playerName: string,

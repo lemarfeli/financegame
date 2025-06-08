@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from '../game-monitor/game.gateway';
 
 @Injectable()
 export class NewsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private gameGateway: GameGateway,) {}
 
   async getActiveNewsForSession(gameSessionId: number) {
     return this.prisma.newsApply.findMany({
@@ -94,7 +95,10 @@ export class NewsService {
     });
 
     if (visibility) {
-      console.log(`Уведомление для игроков: "${description}"`);
+      //console.log(`Уведомление для игроков: "${description}"`);
+      this.gameGateway.sendNewsNotification(gameSessionId, {
+        message: `Новость: "${description}"`,
+      });
     } else {
       console.log(`Невидимая новость "${description}" применена без уведомления`);
     }
@@ -113,6 +117,7 @@ export class NewsService {
         await this.prisma.shares.updateMany({
           where: {
             companyId: { in: companyIds },
+            costShares: { not: 0 },
           },
           data: {
             costShares: {

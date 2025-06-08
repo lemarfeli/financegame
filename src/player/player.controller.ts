@@ -36,9 +36,14 @@ export class PlayerController {
   }
 
   @UseGuards(PlayerTokenGuard)
+  @Get('inventory')
+  async getInventory(@Req() req) {
+    return this.playerService.playerInventory(req.player.id)
+  }
+
+  @UseGuards(PlayerTokenGuard)
   @Post('reconnect')
   async reconnect(@Req() req) {
     return this.playerService.reconnectPlayer(req.player.token);
   }
-
 }

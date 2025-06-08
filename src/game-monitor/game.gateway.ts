@@ -65,4 +65,15 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.server.to(`lobby-${sessionId}`).emit('sessionClosed');
   }
 
+  sendPlayerAction(sessionId: number, playerId: number, message: string) {
+    this.server.to(`game-${sessionId}`).except(`player-${playerId}`).emit('playerAction', { message });
+  }
+
+  sendPlayerNotification(playerId: number, message: string) {
+    this.server.to(`player-${playerId}`).emit('playerNotification', { message });
+  }
+
+  sendNewsNotification(sessionId: number, payload: { message: string }) {
+    this.server.to(`game-${sessionId}`).emit('newsNotification', payload);
+  }
 }

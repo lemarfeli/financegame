@@ -78,15 +78,15 @@ export class CompanyService {
     }
 
     // коэффициент конкуренции
-    const totalCompanies = await this.prisma.company.count({ where: { companyTypeId } });
+    const totalCompanies = await this.prisma.company.count({ where: { companyTypeId, gameSessionId: player.gameSessionId } });
     const competitionPenalty = totalCompanies * 0.1;
 
     const company = await this.prisma.company.create({
       data: {
         companyName,
         companyTypeId,
-        incomeCoEfficient: 1.0 - competitionPenalty,
-        divident_rate: 0.1,
+        incomeCoEfficient: 5.0 - competitionPenalty,
+        divident_rate: 0.5,
         level: 0,
         playerId,
         gameSessionId: player.gameSessionId,
@@ -117,7 +117,12 @@ export class CompanyService {
     }
 
     await this.updateCompetitionCoefficients(companyTypeId);
-    
+
+    this.gameGateway.sendPlayerAction(
+      player.gameSessionId, player.id,
+      `${player.playerName} открыл предприятие "${company.companyName}"`
+    );
+
     return { message: 'Предприятие создано', company };
   }
 
@@ -128,7 +133,7 @@ export class CompanyService {
     for (const c of companies) {
       await this.prisma.company.update({
         where: { id: c.id },
-        data: { incomeCoEfficient: 1.0 - competitionPenalty },
+        data: { incomeCoEfficient: 5.0 - competitionPenalty },
       });
     }
   }
@@ -146,7 +151,7 @@ export class CompanyService {
       where: { companyTypeId: companyId },
     });
 
-    const incomeCoefficient = 1.0 - totalCompanies * 0.1;
+    const incomeCoefficient = 5.0 - totalCompanies * 0.1;
     const expectedIncome = Math.round(companyType.baseIncome * incomeCoefficient * 100);
 
     return {
@@ -185,17 +190,22 @@ export class CompanyService {
       where: { id: company.playerId },
       data: { playerBalance: { increment: netValue } },
     });
-    const player = await this.prisma.player.findUnique({ where: { id: company.playerId } });
-    if (!player) throw new NotFoundException('Игрок не найден');
-    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
-  }
-  
+
     await this.prisma.company.update({
       where: { id: companyId },
       data: {
         playerId: null,
       },
     });
+
+    const player = await this.prisma.player.findUnique({ where: { id: company.playerId } });
+    if (!player) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
+    this.gameGateway.sendPlayerAction(
+      player.gameSessionId, player.id,
+      `${player.playerName} продал предприятие "${company.companyName}"`
+    );
+    }
   
     return {
       message: `Предприятие продано. ${netValue > 0 ? `Игрок получил ${netValue} монет.` : 'Из-за долгов игрок не получил монеты.'}`,
@@ -228,7 +238,7 @@ export class CompanyService {
     await this.prisma.company.update({
       where: { id: companyId },
       data: {
-        incomeCoEfficient: { increment: 0.2 },
+        incomeCoEfficient: { increment: 0.7 },
         level: { increment: 1 },
       },
     });
@@ -278,6 +288,11 @@ export class CompanyService {
           where: { id: company.id },
           data: { isBroken: true },
         });
+
+        if (!company.playerId) throw new NotFoundException('У предприятия нет владельца');
+        this.gameGateway.sendPlayerNotification(company.playerId,
+        `Ваше предприятие "${company.companyName}" сломалось, перейдите в раздел "Предприятия" чтобы починить его`
+        );
       }
     }
   }
@@ -325,9 +340,14 @@ export class CompanyService {
           where: { id: company.playerId },
           data: { playerBalance: { increment: revenue } },
         });
+
         const player = await this.prisma.player.findUnique({ where: { id: company.playerId } });
         if (!player) throw new NotFoundException('Игрок не найден');
         this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
+        this.gameGateway.sendPlayerNotification(
+        player.id,
+        `Ваше предприятие "${company.companyName}" принесло доход ${revenue} монет. Начислен налог в размере: ${Math.round(revenue * 0.2)} монет. Его можно оплатить в налоговой`
+        );
       }
     }
   }
@@ -375,7 +395,10 @@ export class CompanyService {
       data: { playerBalance: { decrement: amount - remaining } },
     });
 
-    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
+    const updateplayer = await this.prisma.player.findUnique({ where: { id: company.playerId } });
+    if (!updateplayer) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(company.playerId, updateplayer.playerBalance);
+
 
     return {
       message: `Оплачено ${amount - remaining} монет налогов. Остаток: ${remaining}`,
@@ -404,7 +427,10 @@ export class CompanyService {
             data: { playerBalance: { decrement: tax.amount } },
           });
 
-          this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
+          const updateplayer = await this.prisma.player.findUnique({ where: { id: player.id } });
+          if (!updateplayer) throw new NotFoundException('Игрок не найден');
+          this.gameGateway.sendBalanceUpdate(player.id, updateplayer.playerBalance);
+
   
           await this.prisma.tax.update({
             where: { id: tax.id },

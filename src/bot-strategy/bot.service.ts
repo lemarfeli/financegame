@@ -6,6 +6,7 @@ import { DepositService } from '../deposit/deposit.service';
 import { LoanService } from '../loan/loan.service';
 import { SharesService } from '../shares/shares.service';
 import { NewsService } from '../news/news.service';
+import { GameGateway } from 'src/game-monitor/game.gateway';
 
 interface MissingResource {
   resourceId: number;
@@ -74,6 +75,7 @@ export class BotService {
     private loanService: LoanService,
     private sharesService: SharesService,
     private newsService: NewsService,
+    // private gameGateway: GameGateway,
   ) {}
 
   async makeBotDecision(playerId: number) {
@@ -165,6 +167,9 @@ export class BotService {
         try {
           await this.loanService.repayLoan(bot.id);
           this.logger.log(`Бот ${bot.id} погасил кредит`);
+          // this.gameGateway.server.to(`session_${bot.gameSessionId}`).emit('botAction', {
+          // playerId: bot.id,
+          // message: `Бот купил ресурс ${resourceId}`,});
         } catch (e) {
           this.logger.warn(
             `Бот ${bot.id} не смог погасить кредит: ${e.message}`,

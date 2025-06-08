@@ -11,6 +11,18 @@ import { generateRandomName } from '../player/utils/name-generator';
 import { BotManagerService } from '../bot-strategy/bot-manager.service.ts';
 import { GameGateway } from '../game-monitor/game.gateway';
 
+interface PlayerSummary {
+  playerId: number;
+  playerName: string;
+  finalBalance: number;
+  totalCompanyValue: number;
+  totalTaxPaid: number;
+  totalLoanPaid: number;
+  totalDepositReturn: number;
+  totalResourceGain: number;
+  totalSharesGain: number;
+}
+
 @Injectable()
 export class GameSessionService {
   constructor(private prisma: PrismaService, 
@@ -22,8 +34,9 @@ export class GameSessionService {
   private companyService: CompanyService,
   private botManagerService: BotManagerService, 
   private gameGateway: GameGateway,
-) {}
+  ) {}
 
+  private finalResultsCache = new Map<number, PlayerSummary[]>();
   async generateGameCode(): Promise<string> {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -120,97 +133,121 @@ export class GameSessionService {
   }
 
   async forceEndGame(sessionId: number) {
-    const session = await this.prisma.gameSession.findUnique({
-      where: { id: sessionId },
-    });
+    const session = await this.prisma.gameSession.findUnique({ where: { id: sessionId } });
+    if (!session || !session.gameStatus) return { message: 'Игра уже завершена или не найдена.' };
 
-    if (!session || !session.gameStatus) {
-      return { message: 'Игра уже завершена или не найдена.' };
-    }
+    await this.botManagerService.stopBotsForSession(sessionId);
 
-    await this.botManagerService.stopBotsForSession(sessionId)
+    const players = await this.prisma.player.findMany({ where: { gameSessionId: sessionId } });
+    const playerSummaries: PlayerSummary[] = [];
 
-    const players = await this.prisma.player.findMany({
-      where: { gameSessionId: sessionId },
-    });
+    await this.sharesService.sellAllSharesOnGameEnd(sessionId);
+    await this.companyService.calculateCompanyRevenues();
+    await this.companyService.autoPayUnpaidTaxes(sessionId);
 
     for (const player of players) {
       const playerId = player.id;
+      let totalCompanyValue = 0;
+      let totalTaxPaid = 0;
+      let totalLoanPaid = 0;
+      let totalDepositReturn = 0;
+      let totalResourceGain = 0;
+      let totalSharesGain = 0;
 
-      // акции
-      await this.sharesService.sellAllSharesOnGameEnd(sessionId);
+      const shares = await this.prisma.sharesTransaction.findMany({
+        where: { playerId },
+      });
+      totalSharesGain = shares.reduce((acc, tx) => acc + (tx.transactionType ? -tx.price : tx.price), 0);
 
-      // ресурсы
-      const resources =
-        await this.resourcesService.getPlayerResources(playerId);
+      const resources = await this.resourcesService.getPlayerResources(playerId);
       for (const res of resources) {
         for (let i = 0; i < res.amount; i++) {
-          await this.resourcesService.sellToMarket(
-            playerId,
-            res.resourceId,
-            sessionId,
-          );
+          await this.resourcesService.sellToMarket(playerId, res.resourceId, sessionId);
+          totalResourceGain += res.cost;
         }
       }
 
-      // вклады
-      const deposits = await this.prisma.deposit.findMany({
-        where: { playerId, datePayout: null },
-      });
-
+      const deposits = await this.prisma.deposit.findMany({ where: { playerId, datePayout: null } });
       for (const deposit of deposits) {
         await this.depositService.closeDepositEarly(playerId, deposit.id);
       }
 
-      // долги по кредитам
-      await this.loanService.forceRepayAtGameEnd(playerId);
+      const allDeposits = await this.prisma.deposit.findMany({ where: { playerId } });
+      totalDepositReturn = allDeposits.reduce((sum, d) => sum + (d.amountRepaid || 0), 0);
 
-      // предприятия
-      await this.companyService.calculateCompanyRevenues();
-      await this.companyService.autoPayUnpaidTaxes(sessionId);
-      await this.companyService.sellAllCompaniesBySession(sessionId);
-      const enterprises = await this.prisma.company.findMany({
+      const loan = await this.prisma.loan.findFirst({ where: { playerId, dateClose: null } });
+      if (loan) {
+        totalLoanPaid = loan.debt + loan.fine;
+        await this.loanService.forceRepayAtGameEnd(playerId);
+      }
+
+      const companies = await this.prisma.company.findMany({
         where: { playerId },
+        include: {
+          companyType: true,
+          companyRevenues: { include: { tax: true } },
+        },
+      });
+      for (const c of companies) {
+        totalCompanyValue += Math.floor(c.companyType.cost * 0.9);
+        const taxes = c.companyRevenues.flatMap(r => r.tax ?? []);
+        for (const t of taxes) {
+          if (t.paid) totalTaxPaid += t.amount;
+        }
+      }
+      await this.companyService.sellAllCompaniesBySession(sessionId);
+
+      const updatedPlayer = await this.prisma.player.findUnique({ where: { id: playerId } });
+      playerSummaries.push({
+        playerId,
+        playerName: player.playerName,
+        finalBalance: updatedPlayer?.playerBalance || 0,
+        totalCompanyValue,
+        totalTaxPaid,
+        totalLoanPaid,
+        totalDepositReturn,
+        totalResourceGain,
+        totalSharesGain,
       });
     }
 
-    const finalPlayers = await this.prisma.player.findMany({
-      where: { gameSessionId: sessionId },
-      orderBy: { playerBalance: 'desc' },
-    });
+    await this.prisma.gameSession.update({ where: { id: sessionId }, data: { gameStatus: false } });
+    await this.prisma.player.updateMany({ where: { gameSessionId: sessionId }, data: { isActive: false } });
 
-    await this.prisma.gameSession.update({
-      where: { id: sessionId },
-      data: { gameStatus: false },
-    });
+    this.finalResultsCache.set(sessionId, playerSummaries);
+    this.gameGateway.notifyGameOver(sessionId, playerSummaries);
 
-    await this.prisma.player.updateMany({
-      where: { gameSessionId: sessionId },
-      data: { isActive: false },
-    });
-
-    const results = await this.getGameResults(sessionId)
-    this.gameGateway.notifyGameOver(sessionId, results)
+    return { message: 'Игра завершена', results: playerSummaries };
   }
+
 
   async getGameResults(sessionId: number) {
-    const session = await this.prisma.gameSession.findUnique({where: { id: sessionId, gameStatus: false },});
-    if (!session || session.gameStatus) {
-      throw new Error('Игра еще не завершена');
-    }
-    const finalPlayers = await this.prisma.player.findMany({
-      where: { gameSessionId: sessionId },
-      orderBy: { playerBalance: 'desc' },
-    });
-
-    return {
-      message: finalPlayers[0]?.playerName,
-      ranking: finalPlayers.map((p) => ({
-        name: p.playerName,
-        balance: p.playerBalance,
-      })),
-    };
+  const cached = this.finalResultsCache.get(sessionId);
+  if (cached) {
+    return { results: cached };
   }
+
+  // fallback – если кэш очистился, только финальные балансы
+  const session = await this.prisma.gameSession.findUnique({
+    where: { id: sessionId, gameStatus: false },
+  });
+  if (!session) {
+    throw new Error('Игра еще не завершена или не найдена');
+  }
+
+  const finalPlayers = await this.prisma.player.findMany({
+    where: { gameSessionId: sessionId },
+    orderBy: { playerBalance: 'desc' },
+  });
+
+  return {
+    results: finalPlayers.map((p) => ({
+      playerId: p.id,
+      playerName: p.playerName,
+      finalBalance: p.playerBalance,
+    })),
+  };
+}
 
   async checkSessionAfterExit(sessionId: number) {
     const activePlayers = await this.prisma.player.findMany({

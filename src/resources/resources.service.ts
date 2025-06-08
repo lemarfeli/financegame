@@ -77,6 +77,11 @@ export class ResourcesService {
     if (!player) throw new NotFoundException('Игрок не найден');
     this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
 
+    this.gameGateway.sendPlayerAction(
+      player.gameSessionId, player.id,
+      `${player.playerName} продал ресурс "${resource.resourceName}"`
+    );
+
     await this.addPlayerResourceToMarket(resourceId, gameSessionId);
 
     return { message: 'Ресурс продан' };
@@ -126,8 +131,6 @@ export class ResourcesService {
       data: { playerBalance: { decrement: resource.resourCecost } },
     });
 
-    this.gameGateway.sendBalanceUpdate(player.id, player.playerBalance);
-
     await this.prisma.resourceOwner.upsert({
       where: { playerId_resourceId: { playerId, resourceId } },
       update: { amount: { increment: 1 } },
@@ -154,6 +157,15 @@ export class ResourcesService {
         data: { quantity: { decrement: 1 } },
       });
     }
+
+    const updateplayer = await this.prisma.player.findUnique({ where: { id: playerId } });
+    if (!updateplayer) throw new NotFoundException('Игрок не найден');
+    this.gameGateway.sendBalanceUpdate(updateplayer.id, updateplayer.playerBalance);
+
+    this.gameGateway.sendPlayerAction(
+      player.gameSessionId, player.id,
+      `${player.playerName} купил ресурс "${resource.resourceName}"`
+    );
 
     return { message: 'Куплено' };
   }
